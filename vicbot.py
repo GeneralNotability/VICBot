@@ -1,55 +1,43 @@
 #!/usr/bin/python
 
-import sys, os
-print os.environ['HOME']
-sys.path.append(os.environ['HOME'] + '/core')
+import os
+import re
+import sys
 
 import pywikibot
 import mwparserfromhell
 import MySQLdb
-import re
-import math
-import string
-import unicodedata
-import urllib
 import viutil # @User:VICbot/source/viutil.py
 
-from urllib import FancyURLopener
+from loguru import logger
     
+# Pre-compiled REs
+link2RE = re.compile('\[\[(?:[^\|\]]+\|){0,1}([^\|\]]+)\]\]')
+link3RE = re.compile('\{\{\w\|([^\|\}]+)\}\}')
+quotesRE = re.compile("'{2,3}")
+
+timeRE = re.compile('(\d\d):(\d\d), (\d\d?) (January|February|March|April|May|June|July|August|September|October|November|December) (\d\d\d\d) \((UTC|GMT)\)')
+userRE = re.compile('\[\[([Uu]ser|[Bb]enutzer|[Gg]ebruiker):([^\|\]]+)[^\]]*\]\]')
+linkRE = re.compile('\[\[([^\|\]:]+)[^\]]*\]\]')
+emptyRE = re.compile('^===[^=]+===\s+^{\{VICs\s+^\}\}\s*', re.MULTILINE)
+#galleryRE = re.compile('^\s*[Ii]mage:([^\|]+)')
+galleryRE = re.compile('^\s*([Ii]mage|[Ff]ile):([^\|]+)')
+viscopeRE = re.compile('^\{\{[vV]I\|(.+)\|[^\|]+\|')
+scopelistRE = re.compile('\*\s*\[\[:[Ii]mage:([^\|\]]+).*\|(.+)\]\]\s*$')
 
 class VICbot:
 
-  def __init__(self, debug):
-    """
-    Constructor. Parameters:
-      * debug     - If True, doesn't do any real changes, but only shows
-                    what would have been changed.
-    """
-    self.debug = debug
+  def __init__(self):
+    """Constructor."""
     self.site = pywikibot.getSite()
 
-  # Give up if replag on main server is too high
-  def put(self, page, text):
-    page.put(text)
-    
   def scrubscope(self, t) :
-    link2RE = re.compile('\[\[(?:[^\|\]]+\|){0,1}([^\|\]]+)\]\]') 
-    link3RE = re.compile('\{\{w\|([^\|\}]+)\}\}')
-    t2 = link2RE.sub( r'\1', t )
-    t3 = link3RE.sub( r'\1', t2 )
-    return t3
+    t2 = link2RE.sub(r'\1', t )
+    t3 = link3RE.sub(r'\1', t2 )
+    t4 = quotesRE.sub('', t3)
+    return t4
 
   def run(self):
-  
-    timeRE = re.compile('(\d\d):(\d\d), (\d\d?) (January|February|March|April|May|June|July|August|September|October|November|December) (\d\d\d\d) \((UTC|GMT)\)')
-    userRE = re.compile('\[\[([Uu]ser|[Bb]enutzer|[Gg]ebruiker):([^\|\]]+)[^\]]*\]\]')
-    linkRE = re.compile('\[\[([^\|\]:]+)[^\]]*\]\]')
-    emptyRE = re.compile('^===[^=]+===\s+^{\{VICs\s+^\}\}\s*', re.MULTILINE)
-    #galleryRE = re.compile('^\s*[Ii]mage:([^\|]+)')
-    galleryRE = re.compile('^\s*([Ii]mage|[Ff]ile):([^\|]+)')
-    viscopeRE = re.compile('^\{\{[vV]I\|(.+)\|[^\|]+\|')
-    scopelistRE = re.compile('\*\s*\[\[:[Ii]mage:([^\|\]]+).*\|(.+)\]\]\s*$')
-
     userNote = {}
     removeCandidates = []
     tagImages = []
@@ -62,23 +50,21 @@ class VICbot:
     # prepare a random sample for COM:VI
     #
 
-    pywikibot.setAction( "preparing a new random sample of four valued images" )
-
     try:
       connection = MySQLdb.connect(host="commonswiki.labsdb", db="commonswiki_p", read_default_file="~/replica.my.cnf" )
       cursor = connection.cursor() 
       cursor.execute( "select page_title from templatelinks, page where tl_title='VI' and tl_namespace=10 and page_namespace=6 and page_id=tl_from order by RAND() limit 4" )
-    except MySQLdb.OperationalError, message: 
-      errorMessage = "Error %d:\n%s" % (message[ 0 ], message[ 1 ] ) 
+    except MySQLdb.OperationalError as message: 
+      logger.error('MySQL Error {}: {}'.format(message[0], message[1]))
     else:
       data = cursor.fetchall()
       cursor.close()
       connection.close()
 
-      sample = u"<gallery>\n"
+      sample = "<gallery>\n"
 
-      for row in range(len(data)):
-        name = data[row][0].decode('utf-8')
+      for row in data:
+        name = row[0]
         scope = ''
 
         page = pywikibot.Page(self.site, 'File:%s' % name )
@@ -86,7 +72,7 @@ class VICbot:
         if page.exists() :
           text = page.get(get_redirect=True)
 
-          for line in string.split(text, "\n") :
+          for line in text.split('\n'):
  
             # find first scope
             scopematch = viscopeRE.search( line ) 
@@ -94,26 +80,19 @@ class VICbot:
               scope = scopematch.group(1)
               continue
 
-        else :
-          print "Odd, VI image page (%s) does not exist!" % name.encode("utf-8")
+        else:
+          logger.warning('Odd, VI image page ({}) does not exist!'.format(name))
           continue
 
-        sample += u"File:%s|%s\n" % ( name, scope )
+        sample += "File:%s|%s\n" % ( name, scope )
 
-      sample += u"</gallery>"
-      print "%s" % sample.encode("utf-8")
+      sample += "</gallery>"
+      logger.debug(sample)
 
       page = pywikibot.Page(self.site, 'Commons:Valued_images/sample' )
-      if not self.debug:
-        page.put( sample )
-      else:
-        oldtext = page.get(get_redirect=True)
-        pywikibot.output(u">>> \03{lightpurple}%s\03{default} <<<" % page.title())
-        pywikibot.showDiff(oldtext, sample)
-
-    #sys.exit(0);
-
-
+      page.text = sample
+      logger.trace(page.text)
+      page.save(summary='preparing a new random sample of four valued images')
 
     #
     # now fetch potential candidate pages
@@ -123,10 +102,8 @@ class VICbot:
       connection = MySQLdb.connect(host="commonswiki.labsdb", db="commonswiki_p", read_default_file="~/replica.my.cnf" )
       cursor = connection.cursor() 
       cursor.execute( "select /* SLOW_OK */ page_title, GROUP_CONCAT( DISTINCT cl_to SEPARATOR '|') from revision, page left join categorylinks on page_id = cl_from  where page_latest=rev_id and page_title like 'Valued_image_candidates/%' and page_namespace=4 and ( TO_DAYS(CURRENT_DATE) - TO_DAYS(rev_timestamp) ) < 25 group by page_id" )
-    except MySQLdb.OperationalError, message: 
-      errorMessage = "Error %d:\n%s" % (message[ 0 ], message[ 1 ] ) 
-      print "--- MySQL Error ---"
-      print errorMessage
+    except MySQLdb.OperationalError as message: 
+      logger.error('MySQL Error {}: {}'.format(message[0], message[1]))
     else:
       data = cursor.fetchall() 
       cursor.close()
@@ -140,63 +117,56 @@ class VICbot:
       text = viutil.unescape( page.get(get_redirect=True) )
 
       # abort if the qicbot marker is missing from the page 
-      if string.find( text, "<!-- VICBOT_ON -->") < 0 :
-        print "the string <!-- VICBOT_ON --> was not found on page " + pageName + candpage
+      if text.find("<!-- VICBOT_ON -->") < 0 :
+        logger.debug("the string <!-- VICBOT_ON --> was not found on page " + pageName + candpage)
       else :
         candidates += text
-
-
 
     #
     # get potential candidates from db
     #
     
-    for row in range(len(data)):
-      name = data[row][0]
-      print name
-      try:
-      	cats = data[row][1]
-      except IndexError:
-	cats = None
-
-      if cats == None :
-        #print "Candidate %s has no categories!" % name.encode("utf-8")
+    for row in data:
+      # Stored as bytes-like, need to decode
+      name = row[0].decode()
+      if not row[1]:
+        logger.debug('Candidate {} has no categories!'.format(name))
         continue
+      cats = row[1].decode()
 
       catlist = cats.split('|')
 
       status = 0
 
-      for cat in catlist :
-        if cat == 'Supported_valued_image_candidates' :
-          status = 0
-        if cat == 'Opposed_valued_image_candidates' :
-          status = 0
-        if cat == 'Promoted_valued_image_candidates' :
-          status = 1
-        if cat == 'Undecided_valued_image_candidates' :
-          status = -1
-        if cat == 'Declined_valued_image_candidates' :
-          status = -1
-        if cat == 'Discussed_valued_image_candidates' :
-          status = 0
-        if cat == 'Nominated_valued_image_candidates' :
-          status = 0
+      if 'Supported_valued_image_candidates' in catlist:
+        status = 0
+      if 'Opposed_valued_image_candidates' in catlist:
+        status = 0
+      if 'Promoted_valued_image_candidates' in catlist:
+        status = 1
+      if 'Undecided_valued_image_candidates' in catlist:
+        status = -1
+      if 'Declined_valued_image_candidates' in catlist:
+        status = -1
+      if 'Discussed_valued_image_candidates' in catlist:
+        status = 0
+      if 'Nominated_valued_image_candidates' in catlist:
+        status = 0
 
       if status == 0 :
-        print ("Nothing to do here (%s, %s)" % ( name.decode('utf-8'), cats )).encode("utf-8")
+        logger.debug('Nothing to do here ({}, {})'.format(name, cats))
         continue
 
       #
       # get nomination subpage
       #
     
-      page = pywikibot.Page(self.site, 'Commons:' + name.decode('utf-8') )
-      text = ""
+      page = pywikibot.Page(self.site, 'Commons:{}'.format(name))
+      text = ''
       if page.exists() :
         text = page.get(get_redirect=True)
       else :
-        print "Odd, VIC subpage does not exist!"
+        logger.warning('Odd, VIC subpage does not exist!')
         continue
 
       #
@@ -210,7 +180,7 @@ class VICbot:
       review = ''
       recordingReview = False
     
-      for rawline in string.split(text, "\n") :
+      for rawline in text.split('\n') :
         line = rawline.lstrip(' ')
 
         if line[:9] == '|subpage=' and subpage == '' :
@@ -221,7 +191,7 @@ class VICbot:
           scope = line[7:]
         if line[:11] == '|nominator=' and nominator == '' :
           user = userRE.search(line)
-          if user != None :
+          if user is not None :
             nominator = user.group(2)
 
         if line[:8] == '|review=' :
@@ -231,26 +201,26 @@ class VICbot:
 
       if image == '' or scope == '' or nominator == '' :
         if image == '' :
-          print "image missing"
+          logger.debug('image missing')
         if scope == '' :
-          print "scope missing"
+          logger.debug('scope missing')
         if nominator == '' :
-          print "nominator missing"
-        print "Candidate %s is missing cruicial parameters" % name.decode('utf-8').encode("utf-8")
+          logger.debug('nominator missing')
+        logger.warning('Candidate {} is missing crucial parameters'.format(name))
         continue
   
       if subpage == '' :
         subpage = image
 
-      if string.find( candidates.replace( ' ', '_' ), subpage.replace( ' ', '_' ) ) < 0 :
-        print "Candidate %s is not listed, I assume it was already handled!" % subpage.encode("utf-8")
+      if candidates.replace( ' ', '_' ).find(subpage.replace( ' ', '_' ) ) < 0 :
+        logger.debug('Candidate {} is not listed, I assume it was already handled!'.format(subpage))
         continue
 
-      if string.find( review, '}}' ) < 0 :
-        print "Unable to extract the review"
+      if not '}}' in review:
+        logger.warning('Unable to extract the review from {}'.format(name))
         review = '}}'
 
-      print ("Handling (%d) %s on %s, nominated by %s" % ( status, image, subpage, nominator )).encode("utf-8")
+      logger.info('Handling ({}) {} on {}, nominated by {}'.format( status, image, subpage, nominator ))
       numChanges += 1
 
       # queue for removal from candidate list
@@ -263,26 +233,17 @@ class VICbot:
         spParam = '|subpage=' + subpage
     
         # queue user notification
-        try:
-          userNote[nominator] += "{{VICpromoted|%s|%s%s%s\n" % ( image, scope, spParam, review )
-        except KeyError:
-          userNote[nominator] = "{{VICpromoted|%s|%s%s%s\n" % ( image, scope, spParam, review ) 
+        notification = '{{VICpromoted|{}|{}{}{}\n'.format( image, scope, spParam, review)
+        if nominator in userNote:
+          userNote[nominator] += notification
+        else:
+          userNote[nominator] = notification
 
         # queue image page tagging
-        tagImages.append( [ image, "{{subst:VI-add|%s%s}}\n" % ( scope, spParam ), u"File:%s|%s" % (image, scope)] )
+        tagImages.append([image, '{{subst:VI-add|{}{}}}\n'.format(scope, spParam), 'File:{}|{}'.format(image, scope)])
 
         # queue for insertion into alphabetical scope list
         scopeList.append( [ image, scope ] )
-
-
-    # no writing, just debugging
-    #for item in tagImages :
-    #	print ("Tag %s with %s" % ( item[0], item[1]) ).encode("utf-8")
-    #for key in userNote.keys() :
-    #	print userNote[key]
-        
-    #sys.exit(0)
-    
 
 
     #
@@ -290,7 +251,6 @@ class VICbot:
     #
     
     page = pywikibot.Page(self.site, 'Commons:Valued_images_by_scope' )
-    pywikibot.setAction("Insert into and resort alphabetical VI list by scope")
     if page.exists() :
       text = page.get(get_redirect=True)
       oldtext = text
@@ -298,76 +258,66 @@ class VICbot:
 
       for entry in scopeList :
         scrubbed = self.scrubscope(entry[1])
-        newList[ scrubbed.replace("'","").upper() ] = "*[[:File:%s|%s]]" % ( entry[0], scrubbed ) 
+        newList[scrubbed.replace("'",'').upper()] = "*[[:File:{}|{}]]".format(entry[0], scrubbed)
 
-      for line in string.split(text, "\n") :
+      for line in text.split('\n') :
         match = scopelistRE.search(line)
-        if match != None :
+        if match:
           newList[ match.group(2).replace("'","").upper() ] = line
 
-      keys = newList.keys()
-      keys.sort()
-      sortedList = "\n".join( map( newList.get, keys) )
+      sortedList = "\n".join( map(newList.get, sorted(newList)))
 
       listPrinted = False
       newText = ''
-      for line in string.split(text, "\n") :
+      for line in text.split('\n') :
         match = scopelistRE.search(line)
-        if match == None :
+        if not match:
           newText += line + "\n"
         elif not listPrinted :
           listPrinted = True
           newText += sortedList + "\n"
 
-      if not self.debug:
-        page.put( newText.rstrip("\n") )
-      else:
-        pywikibot.output(u">>> \03{lightpurple}%s\03{default} <<<" % page.title())
-        pywikibot.showDiff(oldtext, newText.rstrip("\n"))
+      page.text = newText.rstrip('\n')
+      page.save(summary='Insert into and resort alphabetical VI list by scope')
 
     if numChanges == 0 :
-      print "No action taken"
+      logger.info('No action taken')
       sys.exit(0)
 
     #
     # removing candidates from candidate lists
     #
     
-    pywikibot.setAction( "extract processed nominations" )
     candidates = ''
     for candpage in candpages :
       newText = ''
       page = pywikibot.Page(self.site, pageName + candpage )
       candidates = page.get(get_redirect=True)
       oldtext = candidates
-      for line in string.split(candidates, "\n") :
+      for line in candidates.split('\n') :
         keepLine = True
+        # TODO: do we need this?
         uline = viutil.unescape( line )
 
         for remove in removeCandidates :
           #if string.find( uline.replace( ' ', '_' )  , remove.replace( ' ', '_' )  ) >= 0:
           if uline.lstrip("| ").replace( ' ', '_' ) == remove.replace( ' ', '_' ) :
             keepLine = False
-            print "remove %s" % line.encode("utf-8")
-            print "  matched '%s' and '%s'" % ( uline.replace( ' ', '_' ).encode("utf-8") , remove.replace( ' ', '_' ).encode("utf-8") )
+            print("remove {}".format(line))
+            print('  matched \'{}\' and \'{}\''.format(uline.replace( ' ', '_' ), remove.replace( ' ', '_' )))
             continue
   
         if keepLine :
           newText += line + "\n"
 
-      #print newText.encode("utf-8")
-      if not self.debug:
-        page.put( emptyRE.sub( '', newText ).rstrip("\n") )
-      else:
-        pywikibot.output(u">>> \03{lightpurple}%s\03{default} <<<" % page.title())
-        pywikibot.showDiff(oldtext, emptyRE.sub( '', newText ).rstrip("\n"))
+      page.text = emptyRE.sub( '', newText ).rstrip("\n")
+      page.save('remove processed nominations')
 
     #
     # Tag images
     #
     
-    pywikibot.setAction("Tag promoted Valued Image")
-    for image in tagImages :
+    for image in tagImages:
       page = pywikibot.Page(self.site, 'File:' + image[0] )
 
       if page.exists() :
@@ -375,13 +325,10 @@ class VICbot:
         text = page.get(get_redirect=True)
         oldtext = text
         text += "\n" + image[1]
-        if not self.debug:
-          page.put(text)
-        else:
-          pywikibot.output(u">>> \03{lightpurple}%s\03{default} <<<" % page.title())
-          pywikibot.showDiff(oldtext, text)
-      else :
-        print "Oops " + image[0].encode("utf-8") + " doesn't exist..."
+        page.text = text
+        page.save('Tag promoted Valued Image')
+      else:
+        logger.error('Oops, {} doesn\'t exist...'.format(image[0]))
 
     #    
     # Removed sorted images from Valued images/Recently promoted and dispatch them in galleries
@@ -399,9 +346,8 @@ class VICbot:
     # User notifications
     #
     
-    pywikibot.setAction("Notify user of promoted Valued Image(s)")
-    for key in userNote.keys() :
-      pywikibot.output(u">>> notifying user \03{lightpurple}%s{default} <<<" % key)
+    for key in userNote:
+      logger.info('notifying user {}'.format(key))
 
       page = pywikibot.Page(self.site, "User talk:" + key )
 
@@ -413,52 +359,44 @@ class VICbot:
         text = 'Welcome to commons ' + key + ". What better way than starting off with a Valued Image promotion could there be? :-) --~~~~\n\n"
   
       text = text + "\n==Valued Image Promotion==\n" + userNote[key]
-      if not self.debug:
-        page.put(text)
-      else:
-        pywikibot.output(u">>> \03{lightpurple}%s\03{default} <<<" % page.title())
-        pywikibot.showDiff(oldtext, text)
+      page.text = text
+      page.save(summary='Notify user of promoted Valued Image(s)')
 
     #
     # Tag images in scope galleries
     #
     
-    pywikibot.setAction("Tag images in galleries")
-    for entry in scopeList :
+    for entry in scopeList:
       tinySuccess = False
 
       # is there a link in the scope line?
-      link = linkRE.search( entry[1] ) 
-      if link != None :
+      link = linkRE.search(entry[1])
+      if link:
         page = pywikibot.Page(self.site, link.group(1) )
-      else :
-        page = pywikibot.Page(self.site, entry[1] )
+      else:
+        page = pywikibot.Page(self.site, scrubbed )
 
-      if page.exists() :
-        try :
+      if page.exists():	
+        try:
           text = page.get(get_redirect=True)
           newText = ''
-          for line in text.split("\n") :
+          for line in text.split('\n') :
             gallery = galleryRE.search( line )
             if gallery != None :
               if gallery.group(2).replace( ' ', '_' ) == entry[0].replace( ' ', '_' ) :
-                newText += "%s|{{VI-tiny}} %s\n" % ( line.split('|')[0], "|".join( line.split('|')[1:] ) )
+                newText += "{}|{{VI-tiny}} {}\n".format(line.split('|')[0], '|'.join(line.split('|')[1:]))
                 tinySuccess = True
-                print "success! " + entry[1].encode("utf-8")
+                logger.debug("success! " + scrubbed)
               else :
                 newText += line + "\n"
             else :
               newText += line + "\n"
-          if not self.debug:
-            page.put( newText.rstrip("\n") )
-            #print newText.encode("utf-8")
-          else:
-            pywikibot.output(u">>> \03{lightpurple}%s\03{default} <<<" % page.title())
-            pywikibot.showDiff(text, newText.rstrip("\n"))
-        except :
-          print "exception in gallery tagging"
-      else :
-        print "Gallery %s does not exist" % entry[1].encode("utf-8")
+          page.text = newText.rstrip('\n')
+          page.save(summary='Tag images in galleries')
+        except Exception as e:
+          logger.error("exception in gallery tagging: {}".format(e))
+      else:
+        logger.error('Gallery {} does not exist'.format(page))
 
       if not tinySuccess :
         page = pywikibot.Page(self.site, pageName + "/tag_galleries" )
@@ -469,14 +407,9 @@ class VICbot:
           oldtext = ''
           text = "add <nowiki>{{VI-tiny}}</nowiki> at the gallery that matches the scope best and then remove the entry from this list\n\n"
 
-        text = text + "\n*[[:File:%s|%s]]" % ( entry[0], self.scrubscope(entry[1]) )
-        if not self.debug:
-          page.put(text)
-          #print text.encode("utf-8")
-        else:
-          pywikibot.output(u">>> \03{lightpurple}%s\03{default} <<<" % page.title())
-          pywikibot.showDiff(oldtext, text)
-
+        text = text + '\n*[[:File:{}|{}]]'.format( entry[0], scrubbed)
+        page.text = text
+        page.save(summary='Tag images in galleries')
     # done!
 
   def dispatchRecentlyPromoted(self):
@@ -487,11 +420,10 @@ class VICbot:
     """
     
     # Set the edit summary message
-    pywikibot.setAction(u'Adding recently categorized [[COM:VI|valued images]] to the [[:Category:Galleries of valued images|VI galleries]]')
-    pywikibot.output(u'Adding recently categorized VIs to the VI galleries')
+    logger.info('Adding recently categorized VIs to the VI galleries')
     
-    recentPage = pywikibot.Page(self.site, u'Commons:Valued images/Recently promoted')
-    galleryPrefix = u'Commons:Valued images by topic/'
+    recentPage = pywikibot.Page(self.site, 'Commons:Valued images/Recently promoted')
+    galleryPrefix = 'Commons:Valued images by topic/'
     
     recentOldText = ""
     recentNewText = ""
@@ -499,10 +431,10 @@ class VICbot:
     try:
       recentOldText = recentPage.get(get_redirect=True)
     except pywikibot.NoPage:
-      pywikibot.output(u"Page %s does not exist; skipping." % recentPage.aslink())
+      logger.debug('Page {} does not exist; skipping.'.format(recentPage.aslink()))
       return
     except pywikibot.IsRedirectPage:
-      pywikibot.output(u"Page %s is a redirect; skipping." % recentPage.aslink())
+      logger.debug('Page {} is a redirect; skipping.'.format(recentPage.aslink()))
     
     #The structure recording the needed moves
     moveMap = {}
@@ -511,30 +443,30 @@ class VICbot:
     inGallery = False
     for line in recentOldText.split('\n'):
       if not inGallery:
-        if line == u'<gallery>':
+        if line == '<gallery>':
           inGallery=True
           recentNewText += line + '\n'
           continue
         else:
           recentNewText += line + '\n'
       else:
-        if line == u'</gallery>':
+        if line == '</gallery>':
           inGallery=False
           recentNewText += line + '\n'
           continue
         else:
           #Here we process an image
-          firstPipePosition = line.find(u'|')
+          firstPipePosition = line.find('|')
           fileName = line[0:firstPipePosition]
           caption = line[firstPipePosition + 1:]
-          if caption.startswith(u'{{VICbotMove|'):
+          if caption.startswith('{{VICbotMove|'):
             #The VI is categorized already
-            firstPipe = caption.find(u'|')
-            lastPipe = caption.rfind(u'|')
-            endOfTemplate = caption.rfind(u'}}')
+            firstPipe = caption.find('|')
+            lastPipe = caption.rfind('|')
+            endOfTemplate = caption.rfind('}}')
             scope = caption[firstPipe+1:lastPipe]
             subpage = caption[lastPipe+1:endOfTemplate]
-            if subpage not in moveMap.keys():
+            if subpage not in list(moveMap.keys()):
               moveMap[subpage] = []
             moveMap[subpage].append((fileName, scope))
           else:
@@ -547,61 +479,49 @@ class VICbot:
       try:
         currentGalleryText = galleryPage.get(get_redirect=True)
       except pywikibot.NoPage:
-        pywikibot.output(u'****************************************************')
-        pywikibot.output(u"Page %s does not exist; skipping." % galleryPage.aslink())
-        pywikibot.output(u"Skipped lines:")
+        logger.warning('Page {} does not exist; skipping.'.format(galleryPage.aslink()))
+        pywikibot.output("Skipped lines:")
         for pair in moveMap[subpage]:
-          pywikibot.output(pair[0] + u'|' + pair[1])
-        pywikibot.output(u'****************************************************')
+          pywikibot.output(pair[0] + '|' + pair[1])
         continue
       except pywikibot.IsRedirectPage:
-        pywikibot.output(u'****************************************************')
-        pywikibot.output(u"Page %s is a redirect; skipping." % galleryPage.aslink())
-        pywikibot.output(u"Skipped lines:")
+        logger.warning('Page {} is a redirect; skipping.'.format(galleryPage.aslink()))
+        pywikibot.output("Skipped lines:")
         for pair in moveMap[subpage]:
-          pywikibot.output(pair[0] + u'|' + pair[1])
-        pywikibot.output(u'****************************************************')
+          pywikibot.output(pair[0] + '|' + pair[1])
         continue
-      endOfGal = currentGalleryText.rfind(u'\n</gallery>')
+      endOfGal = currentGalleryText.rfind('\n</gallery>')
       if endOfGal < 0:
-        pywikibot.output(u'****************************************************')
-        pywikibot.output(u"Gallery on page %s is malformed; skipping." % galleryPage.aslink())
-        pywikibot.output(u"Skipped lines:")
+        pywikibot.output('Gallery on page {} is malformed; skipping.'.format(galleryPage.aslink()))
+        pywikibot.output("Skipped lines:")
         for pair in moveMap[subpage]:
-          pywikibot.output(pair[0] + u'|' + pair[1])
-        pywikibot.output(u'****************************************************')
+          pywikibot.output(pair[0] + '|' + pair[1])
         continue
       newGalleryText = currentGalleryText[:endOfGal]
       for pair in moveMap[subpage]:
-        newGalleryText += u'\n' + pair[0] + u'|' + pair[1]
+        newGalleryText += '\n' + pair[0] + '|' + pair[1]
       newGalleryText += currentGalleryText[endOfGal:]
-      if not self.debug:
-        try:
-          self.put(galleryPage, newGalleryText)
-        except pywikibot.LockedPage:
-          pywikibot.output(u"Page %s is locked; skipping." % galleryPage.aslink())
-        except pywikibot.EditConflict:
-          pywikibot.output(u'Skipping %s because of edit conflict' % (galleryPage.title()))
-        except pywikibot.SpamfilterError, error:
-          pywikibot.output(u'Cannot change %s because of spam blacklist entry %s' % (galleryPage.title(), error.url))
-      pywikibot.output(u"*** %s ***" % galleryPage.title())
-      pywikibot.showDiff(currentGalleryText, newGalleryText)
+      try:
+        galleryPage.text = newGalleryText
+        galleryPage.save(summary='Adding recently categorized [[COM:VI|valued images]] to the [[:Category:Galleries of valued images|VI galleries]]')
+      except pywikibot.LockedPage:
+        logger.warning('Page {} is locked; skipping.'.format(galleryPage.aslink()))
+      except pywikibot.EditConflict:
+        logger.warning('Skipping {} because of edit conflict'.format(galleryPage.title()))
+      except pywikibot.SpamfilterError as error:
+        logger.warning('Cannot change {} because of spam blacklist entry {}'.format(galleryPage.title(), error.url))
     
     #update the "Recently promoted" page
     recentNewText = recentNewText.rstrip()
-    if not self.debug:
-      try:
-        self.put(recentPage, recentNewText)
-        pass
-      except pywikibot.LockedPage:
-        pywikibot.output(u"Page %s is locked; skipping." % recentPage.aslink())
-      except pywikibot.EditConflict:
-        pywikibot.output(u'Skipping %s because of edit conflict' % (recentPage.title()))
-      except pywikibot.SpamfilterError, error:
-        pywikibot.output(u'Cannot change %s because of spam blacklist entry %s' % (recentPage.title(), error.url))
-    if (recentNewText != recentOldText):
-      pywikibot.output(u"*** %s\03{default} ***" % recentPage.title())
-      pywikibot.showDiff(recentOldText, recentNewText)
+    try:
+      recentPage.text = recentNewText
+      galleryPage.save(summary='Adding recently categorized [[COM:VI|valued images]] to the [[:Category:Galleries of valued images|VI galleries]]')
+    except pywikibot.LockedPage:
+      logger.warning('Page {} is locked; skipping.'.format(recentPage.aslink()))
+    except pywikibot.EditConflict:
+      logger.warning('Skipping {} because of edit conflict'.format(recentPage.title()))
+    except pywikibot.SpamfilterError as error:
+      logger.warning('Cannot change {} because of spam blacklist entry {}'.format(recentPage.title(), error.url))
 
   def populateRecentlyPromoted(self, tagImages):
     """
@@ -610,55 +530,41 @@ class VICbot:
       Arguments :
       tagImages   list constructed in the main program
     """
-    pywikibot.setAction(u'Preparing newly promoted [[COM:VI|Valued Images]] for sorting')
     recentPage = pywikibot.Page(self.site, "Commons:Valued images/Recently promoted")
       
     try:
       currentOutputText = recentPage.get(get_redirect=True)
     except pywikibot.NoPage:
-      pywikibot.output(u"Page %s does not exist; skipping." % page.aslink())
+      logger.warning('Page {} does not exist; skipping.'.format(page.aslink()))
       return
     except pywikibot.IsRedirectPage:
-      pywikibot.output(u"Page %s is a redirect; skipping." % page.aslink())
+      logger.warning('Page {} is a redirect; skipping.'.format(page.aslink()))
       return
     except:
-      pywikibot.output(page.aslink())
-      print "An unhandled exception occured, here's the traceback!"
-      traceback.print_exc()
+      logger.exception("An unhandled exception occured:")
       return
     
-    endOfGal = currentOutputText.rfind(u'\n</gallery>')
+    endOfGal = currentOutputText.rfind('\n</gallery>')
     if endOfGal < 0:
-      pywikibot.output(u"Gallery on page %s is malformed; skipping." % outputPage.aslink())
+      logger.debug('Gallery on page {} is malformed; skipping.'.format(outputPage.aslink()))
     else:
       newOutputText = currentOutputText[:endOfGal]
       for image in tagImages:
-        newOutputText += u"\n" + image[2]
+        newOutputText += "\n" + image[2]
       newOutputText += currentOutputText[endOfGal:]
         
-    if not self.debug:
-      try:
-        self.put(recentPage, newOutputText)
-      except pywikibot.LockedPage:
-        pywikibot.output(u"Page %s is locked; skipping." % outputPage.aslink())
-      except pywikibot.EditConflict:
-        pywikibot.output(u'Skipping %s because of edit conflict' % (outputPage.title()))
-      except pywikibot.SpamfilterError, error:
-        pywikibot.output(u'Cannot change %s because of spam blacklist entry %s' % (outputPage.title(), error.url))
-    else:
-      if (currentOutputText != newOutputText):
-        pywikibot.output(u">>> \03{lightpurple}%s\03{default} <<<" % recentPage.title())
-        pywikibot.showDiff(currentOutputText, newOutputText)
-    return
+    try:
+      recentPage.text = newOutputText
+      recentPage.save(summary='Preparing newly promoted [[COM:VI|Valued Images]] for sorting')
+    except pywikibot.LockedPage:
+      logger.warning('Page {} is locked; skipping.'.format(outputPage.aslink()))
+    except pywikibot.EditConflict:
+      logger.warning('Skipping {} because of edit conflict'.format(outputPage.title()))
+    except pywikibot.SpamfilterError as error:
+      logger.warning('Cannot change {} because of spam blacklist entry {}'.format(outputPage.title(), error.url))
 
 def main():
-  
-  # Trigger debug mode
-  debug = False
-  for arg in pywikibot.handleArgs():
-    if arg.startswith("-debug"):
-      debug = True
-  bot = VICbot(debug)
+  bot = VICbot()
   bot.run()
 
 if __name__ == "__main__":

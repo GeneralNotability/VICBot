@@ -1,12 +1,10 @@
 #!/usr/bin/python
 # -*- coding: utf-8  -*-
 import sys, os
-sys.path.append(os.environ['HOME'] + '/core')
 
 import pywikibot
-import urllib
 import re
-import htmlentitydefs
+import html.entities
 
 """
   vi-util.py
@@ -32,16 +30,16 @@ def unescape_charref(ref) :
   if name.startswith("x") :
     name = name[1:]
     base = 16
-  return unichr(int(name, base))
+  return chr(int(name, base))
 
 def replace_entities(match) :
   ent = match.group()
   if ent[1] == "#":
     return unescape_charref(ent)
 
-  repl = htmlentitydefs.name2codepoint.get(ent[1:-1])
+  repl = html.entities.name2codepoint.get(ent[1:-1])
   if repl is not None :
-    repl = unichr(repl)
+    repl = chr(repl)
   else :
     repl = ent
   return repl
@@ -71,13 +69,13 @@ def getScope(page):
     
     templates = page.templatesWithParams()
     for template in templates:
-      if template[0].find(u'VI') == 0 or template[0].find(u'Valued image') == 0:
+      if template[0].find('VI') == 0 or template[0].find('Valued image') == 0:
         return template[1][0]
     return False
     
   else:
     #It should be a VI candidate page
-    if not page.title().startswith(u"Commons:Valued image candidates"):
+    if not page.title().startswith("Commons:Valued image candidates"):
       return False
     
     try:
@@ -87,9 +85,9 @@ def getScope(page):
     
     templates = page.templatesWithParams()
     for template in templates:
-      if template[0].find(u'VIC') == 0:
+      if template[0].find('VIC') == 0:
         for param in template[1]:
-          if param.find(u'scope') == 0:
+          if param.find('scope') == 0:
             scope = param[6:len(param)]
             scope = scope.lstrip().rstrip()
             return scope
@@ -111,12 +109,12 @@ def getVIfromVIC(vicPage):
 
   templates = vicPage.templatesWithParams()
   for template in templates:
-    if template[0].find(u'VIC') == 0:
+    if template[0].find('VIC') == 0:
       for param in template[1]:
-        if param.find(u'image') == 0:
+        if param.find('image') == 0:
           imageName = param[6:len(param)]
           imageName = imageName.lstrip().rstrip()
-          return u"File:" + imageName
+          return "File:" + imageName
   return False
 
 # Returns the name of the least replagged Commons replica
