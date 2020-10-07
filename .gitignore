@@ -127,3 +127,8 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+pywikibot.lwp
+throttle.ctrl
+user-config.py
+user-password.py
+apicache-py3
