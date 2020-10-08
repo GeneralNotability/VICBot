@@ -16,7 +16,6 @@ link2RE = re.compile('\[\[(?:[^\|\]]+\|){0,1}([^\|\]]+)\]\]')
 link3RE = re.compile('\{\{\w\|([^\|\}]+)\}\}')
 quotesRE = re.compile("'{2,3}")
 
-timeRE = re.compile('(\d\d):(\d\d), (\d\d?) (January|February|March|April|May|June|July|August|September|October|November|December) (\d\d\d\d) \((UTC|GMT)\)')
 userRE = re.compile('\[\[([Uu]ser|[Bb]enutzer|[Gg]ebruiker):([^\|\]]+)[^\]]*\]\]')
 linkRE = re.compile('\[\[([^\|\]:]+)[^\]]*\]\]')
 emptyRE = re.compile('^===[^=]+===\s+^{\{VICs\s+^\}\}\s*', re.MULTILINE)
@@ -84,7 +83,7 @@ class VICbot:
           logger.warning('Odd, VI image page ({}) does not exist!'.format(name))
           continue
 
-        sample += "File:%s|%s\n" % ( name, scope )
+        sample += 'File:{}|{}\n'.format(name, scope)
 
       sample += "</gallery>"
       logger.debug(sample)
@@ -218,7 +217,7 @@ class VICbot:
 
       if not '}}' in review:
         logger.warning('Unable to extract the review from {}'.format(name))
-        review = '}}'
+        review = '}}}}'
 
       logger.info('Handling ({}) {} on {}, nominated by {}'.format( status, image, subpage, nominator ))
       numChanges += 1
@@ -233,14 +232,15 @@ class VICbot:
         spParam = '|subpage=' + subpage
     
         # queue user notification
-        notification = '{{VICpromoted|{}|{}{}{}\n'.format( image, scope, spParam, review)
+        # Double '{{' so that the format string interprets them as literal braces
+        notification = '{{{{VICpromoted|{}|{}{}{}\n'.format( image, scope, spParam, review)
         if nominator in userNote:
           userNote[nominator] += notification
         else:
           userNote[nominator] = notification
 
         # queue image page tagging
-        tagImages.append([image, '{{subst:VI-add|{}{}}}\n'.format(scope, spParam), 'File:{}|{}'.format(image, scope)])
+        tagImages.append([image, '{{{{subst:VI-add|{}{}}}}}\n'.format(scope, spParam), 'File:{}|{}'.format(image, scope)])
 
         # queue for insertion into alphabetical scope list
         scopeList.append( [ image, scope ] )
@@ -384,7 +384,7 @@ class VICbot:
             gallery = galleryRE.search( line )
             if gallery != None :
               if gallery.group(2).replace( ' ', '_' ) == entry[0].replace( ' ', '_' ) :
-                newText += "{}|{{VI-tiny}} {}\n".format(line.split('|')[0], '|'.join(line.split('|')[1:]))
+                newText += "{}|{{{{VI-tiny}}}} {}\n".format(line.split('|')[0], '|'.join(line.split('|')[1:]))
                 tinySuccess = True
                 logger.debug("success! " + scrubbed)
               else :
