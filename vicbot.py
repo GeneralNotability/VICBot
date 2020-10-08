@@ -370,6 +370,7 @@ class VICbot:
       tinySuccess = False
 
       # is there a link in the scope line?
+      scrubbed = self.scrubscope(entry[1])
       link = linkRE.search(entry[1])
       if link:
         page = pywikibot.Page(self.site, link.group(1) )
