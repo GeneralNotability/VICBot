@@ -57,6 +57,7 @@ class VICbot:
       logger.error('MySQL Error {}: {}'.format(message[0], message[1]))
     else:
       data = cursor.fetchall()
+      print(data)
       cursor.close()
       connection.close()
 
@@ -66,7 +67,7 @@ class VICbot:
         name = row[0]
         scope = ''
 
-        page = pywikibot.Page(self.site, 'File:%s' % name )
+        page = pywikibot.Page(self.site, 'File:{}'.format(name.decode()))
         text = ""
         if page.exists() :
           text = page.get(get_redirect=True)
@@ -86,11 +87,10 @@ class VICbot:
         sample += 'File:{}|{}\n'.format(name, scope)
 
       sample += "</gallery>"
-      logger.debug(sample)
 
       page = pywikibot.Page(self.site, 'Commons:Valued_images/sample' )
       page.text = sample
-      logger.trace(page.text)
+      logger.trace('Gallery:\n{}'.format(page.text))
       page.save(summary='preparing a new random sample of four valued images')
 
     #
