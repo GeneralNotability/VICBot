@@ -565,6 +565,7 @@ class VICbot:
       logger.warning('Cannot change {} because of spam blacklist entry {}'.format(outputPage.title(), error.url))
 
 def main():
+  pywikibot.handle_args()
   bot = VICbot()
   bot.run()
 
