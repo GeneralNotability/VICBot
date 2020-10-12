@@ -24,6 +24,8 @@ galleryRE = re.compile('^\s*([Ii]mage|[Ff]ile):([^\|]+)')
 viscopeRE = re.compile('^\{\{[vV]I\|(.+)\|[^\|]+\|')
 scopelistRE = re.compile('\*\s*\[\[:[Ii]mage:([^\|\]]+).*\|(.+)\]\]\s*$')
 
+TASK_MESSAGE = 'GeneralBotability [[Commons:Bots/Requests/GeneralBotability|task 1]] (maintain VIC): '
+
 class VICbot:
 
   def __init__(self):
@@ -57,7 +59,6 @@ class VICbot:
       logger.error('MySQL Error {}: {}'.format(message[0], message[1]))
     else:
       data = cursor.fetchall()
-      print(data)
       cursor.close()
       connection.close()
 
@@ -91,7 +92,7 @@ class VICbot:
       page = pywikibot.Page(self.site, 'Commons:Valued_images/sample' )
       page.text = sample
       logger.trace('Gallery:\n{}'.format(page.text))
-      page.save(summary='preparing a new random sample of four valued images')
+      page.save(summary='{} prepare new random sample of four valued images'.format(TASK_MESSAGE))
 
     #
     # now fetch potential candidate pages
@@ -278,7 +279,7 @@ class VICbot:
           newText += sortedList + "\n"
 
       page.text = newText.rstrip('\n')
-      page.save(summary='Insert into and resort alphabetical VI list by scope')
+      page.save(summary='{} insert into and sort alphabetical VI list by scope'.format(TASK_MESSAGE))
 
     if numChanges == 0 :
       logger.info('No action taken')
@@ -289,7 +290,7 @@ class VICbot:
     #
     
     candidates = ''
-    for candpage in candpages :
+    for candpage in candpages:
       newText = ''
       page = pywikibot.Page(self.site, pageName + candpage )
       candidates = page.get(get_redirect=True)
@@ -311,7 +312,7 @@ class VICbot:
           newText += line + "\n"
 
       page.text = emptyRE.sub( '', newText ).rstrip("\n")
-      page.save('remove processed nominations')
+      page.save(summary='{} remove processed nominations'.format(TASK_MESSAGE))
 
     #
     # Tag images
@@ -326,7 +327,7 @@ class VICbot:
         oldtext = text
         text += "\n" + image[1]
         page.text = text
-        page.save('Tag promoted Valued Image')
+        page.save(summary='{} tag promoted Valued Image'.format(TASK_MESSAGE))
       else:
         logger.error('Oops, {} doesn\'t exist...'.format(image[0]))
 
@@ -360,7 +361,7 @@ class VICbot:
   
       text = text + "\n==Valued Image Promotion==\n" + userNote[key]
       page.text = text
-      page.save(summary='Notify user of promoted Valued Image(s)')
+      page.save(summary='{} notify user of promoted Valued Image(s)'.format(TASK_MESSAGE))
 
     #
     # Tag images in scope galleries
@@ -393,7 +394,7 @@ class VICbot:
             else :
               newText += line + "\n"
           page.text = newText.rstrip('\n')
-          page.save(summary='Tag images in galleries')
+          page.save(summary='{} tag images in galleries'.format(TASK_MESSAGE))
         except Exception as e:
           logger.error("exception in gallery tagging: {}".format(e))
       else:
@@ -410,7 +411,7 @@ class VICbot:
 
         text = text + '\n*[[:File:{}|{}]]'.format( entry[0], scrubbed)
         page.text = text
-        page.save(summary='Tag images in galleries')
+        page.save(summary='{} tag images in galleries'.format(TASK_MESSAGE))
     # done!
 
   def dispatchRecentlyPromoted(self):
@@ -504,7 +505,7 @@ class VICbot:
       newGalleryText += currentGalleryText[endOfGal:]
       try:
         galleryPage.text = newGalleryText
-        galleryPage.save(summary='Adding recently categorized [[COM:VI|valued images]] to the [[:Category:Galleries of valued images|VI galleries]]')
+        galleryPage.save(summary='{} add recently categorized [[COM:VI|valued images]] to the [[:Category:Galleries of valued images|VI galleries]]'.format(TASK_MESSAGE))
       except pywikibot.LockedPage:
         logger.warning('Page {} is locked; skipping.'.format(galleryPage.aslink()))
       except pywikibot.EditConflict:
@@ -516,7 +517,7 @@ class VICbot:
     recentNewText = recentNewText.rstrip()
     try:
       recentPage.text = recentNewText
-      galleryPage.save(summary='Adding recently categorized [[COM:VI|valued images]] to the [[:Category:Galleries of valued images|VI galleries]]')
+      galleryPage.save(summary='{} add recently categorized [[COM:VI|valued images]] to the [[:Category:Galleries of valued images|VI galleries]]'.format(TASK_MESSAGE))
     except pywikibot.LockedPage:
       logger.warning('Page {} is locked; skipping.'.format(recentPage.aslink()))
     except pywikibot.EditConflict:
@@ -556,7 +557,7 @@ class VICbot:
         
     try:
       recentPage.text = newOutputText
-      recentPage.save(summary='Preparing newly promoted [[COM:VI|Valued Images]] for sorting')
+      recentPage.save(summary='{} preparing newly promoted [[COM:VI|Valued Images]] for sorting'.format(TASK_MESSAGE))
     except pywikibot.LockedPage:
       logger.warning('Page {} is locked; skipping.'.format(outputPage.aslink()))
     except pywikibot.EditConflict:
