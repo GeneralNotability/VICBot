@@ -25,12 +25,14 @@ viscopeRE = re.compile('^\{\{[vV]I\|(.+)\|[^\|]+\|')
 scopelistRE = re.compile('\*\s*\[\[:[Ii]mage:([^\|\]]+).*\|(.+)\]\]\s*$')
 
 TASK_MESSAGE = 'GeneralBotability [[Commons:Bots/Requests/GeneralBotability|task 1]] (maintain VIC): '
+ERROR_PAGE = 'User:GeneralBotability/Task 1 errors'
 
 class VICbot:
 
   def __init__(self):
     """Constructor."""
     self.site = pywikibot.getSite()
+    self.error_page_content = ''
 
   def scrubscope(self, t) :
     t2 = link2RE.sub(r'\1', t )
@@ -45,6 +47,7 @@ class VICbot:
     scopeList = []
     numChanges = 0
 
+
     pageName = 'Commons:Valued_image_candidates'
     
     #
@@ -55,44 +58,47 @@ class VICbot:
       connection = MySQLdb.connect(host="commonswiki.labsdb", db="commonswiki_p", read_default_file="~/replica.my.cnf" )
       cursor = connection.cursor() 
       cursor.execute( "select page_title from templatelinks, page where tl_title='VI' and tl_namespace=10 and page_namespace=6 and page_id=tl_from order by RAND() limit 4" )
-    except MySQLdb.OperationalError as message: 
+    except MySQLdb.OperationalError as message:
       logger.error('MySQL Error {}: {}'.format(message[0], message[1]))
-    else:
-      data = cursor.fetchall()
-      cursor.close()
-      connection.close()
+      self.error_page_content += '* In sample gallery generation: MySQL error\n'
+      self.save_error_page()
+      return
+    data = cursor.fetchall()
+    cursor.close()
+    connection.close()
 
-      sample = "<gallery>\n"
+    sample = "<gallery>\n"
 
-      for row in data:
-        name = row[0]
-        scope = ''
+    for row in data:
+      name = row[0]
+      scope = ''
 
-        page = pywikibot.Page(self.site, 'File:{}'.format(name.decode()))
-        text = ""
-        if page.exists() :
-          text = page.get(get_redirect=True)
+      page = pywikibot.Page(self.site, 'File:{}'.format(name.decode()))
+      text = ""
+      if page.exists():
+        text = page.get(get_redirect=True)
 
-          for line in text.split('\n'):
- 
-            # find first scope
-            scopematch = viscopeRE.search( line ) 
-            if scopematch != None :
-              scope = scopematch.group(1)
-              continue
+        for line in text.split('\n'):
 
-        else:
-          logger.warning('Odd, VI image page ({}) does not exist!'.format(name))
-          continue
+          # find first scope
+          scopematch = viscopeRE.search( line ) 
+          if scopematch != None :
+            scope = scopematch.group(1)
+            continue
 
-        sample += 'File:{}|{}\n'.format(name, scope)
+      else:
+        logger.warning('Odd, VI image page ({}) does not exist!'.format(name))
+        self.error_page_content += '* In sample gallery generation: VI page {} does not exist\n'.format(name)
+        continue
 
-      sample += "</gallery>"
+      sample += 'File:{}|{}\n'.format(name, scope)
 
-      page = pywikibot.Page(self.site, 'Commons:Valued_images/sample' )
-      page.text = sample
-      logger.trace('Gallery:\n{}'.format(page.text))
-      page.save(summary='{} prepare new random sample of four valued images'.format(TASK_MESSAGE))
+    sample += "</gallery>"
+
+    page = pywikibot.Page(self.site, 'Commons:Valued_images/sample' )
+    page.text = sample
+    logger.trace('Gallery:\n{}'.format(page.text))
+    page.save(summary='{} prepare new random sample of four valued images'.format(TASK_MESSAGE))
 
     #
     # now fetch potential candidate pages
@@ -104,6 +110,7 @@ class VICbot:
       cursor.execute( "select /* SLOW_OK */ page_title, GROUP_CONCAT( DISTINCT cl_to SEPARATOR '|') from revision, page left join categorylinks on page_id = cl_from  where page_latest=rev_id and page_title like 'Valued_image_candidates/%' and page_namespace=4 and ( TO_DAYS(CURRENT_DATE) - TO_DAYS(rev_timestamp) ) < 25 group by page_id" )
     except MySQLdb.OperationalError as message: 
       logger.error('MySQL Error {}: {}'.format(message[0], message[1]))
+      self.error_page_content += '* In candidate evaluation: MySQL error\n'
     else:
       data = cursor.fetchall() 
       cursor.close()
@@ -167,6 +174,7 @@ class VICbot:
         text = page.get(get_redirect=True)
       else :
         logger.warning('Odd, VIC subpage does not exist!')
+        self.error_page_content += '* In candidate evaluation for [[{}]]: VIC subpage missing\n'.format(name)
         continue
 
       #
@@ -207,6 +215,7 @@ class VICbot:
         if nominator == '' :
           logger.debug('nominator missing')
         logger.warning('Candidate {} is missing crucial parameters'.format(name))
+        self.error_page_content += '* In candidate evaluation for [[{}]]: review missing parameters\n'.format(name)
         continue
   
       if subpage == '' :
@@ -218,6 +227,7 @@ class VICbot:
 
       if not '}}' in review:
         logger.warning('Unable to extract the review from {}'.format(name))
+        self.error_page_content += '* In candidate evaluation for [[{}]]: failed to parse review\n'.format(name)
         review = '}}}}'
 
       logger.info('Handling ({}) {} on {}, nominated by {}'.format( status, image, subpage, nominator ))
@@ -278,12 +288,13 @@ class VICbot:
           listPrinted = True
           newText += sortedList + "\n"
 
-      page.text = newText.rstrip('\n')
-      page.save(summary='{} insert into and sort alphabetical VI list by scope'.format(TASK_MESSAGE))
-
     if numChanges == 0 :
       logger.info('No action taken')
-      sys.exit(0)
+      self.save_error_page()
+      return
+    else:
+      page.text = newText.rstrip('\n')
+      page.save(summary='{} insert into and sort alphabetical VI list by scope'.format(TASK_MESSAGE))
 
     #
     # removing candidates from candidate lists
@@ -329,6 +340,7 @@ class VICbot:
         page.text = text
         page.save(summary='{} tag promoted Valued Image'.format(TASK_MESSAGE))
       else:
+        self.error_page_content += '* In image taggin: [[{}]] does not exist\n'.format(image[0])
         logger.error('Oops, {} doesn\'t exist...'.format(image[0]))
 
     #    
@@ -413,6 +425,7 @@ class VICbot:
         page.text = text
         page.save(summary='{} tag images in galleries'.format(TASK_MESSAGE))
     # done!
+    
 
   def dispatchRecentlyPromoted(self):
     """
@@ -482,26 +495,29 @@ class VICbot:
         currentGalleryText = galleryPage.get(get_redirect=True)
       except pywikibot.NoPage:
         logger.warning('Page {} does not exist; skipping.'.format(galleryPage.aslink()))
-        pywikibot.output("Skipped lines:")
+        self.error_page_content += '* In gallery population: {} does not exist\n'.format(gallerypage.aslink())
+        logger.debug("Skipped lines:")
         for pair in moveMap[subpage]:
-          pywikibot.output(pair[0] + '|' + pair[1])
+          logger.debug(pair[0] + '|' + pair[1])
         continue
       except pywikibot.IsRedirectPage:
         logger.warning('Page {} is a redirect; skipping.'.format(galleryPage.aslink()))
-        pywikibot.output("Skipped lines:")
+        logger.debug("Skipped lines:")
         for pair in moveMap[subpage]:
-          pywikibot.output(pair[0] + '|' + pair[1])
+          logger.debug(pair[0] + '|' + pair[1])
         continue
       endOfGal = currentGalleryText.rfind('\n</gallery>')
       if endOfGal < 0:
-        pywikibot.output('Gallery on page {} is malformed; skipping.'.format(galleryPage.aslink()))
-        pywikibot.output("Skipped lines:")
+        logger.error('Gallery on page {} is malformed; skipping.'.format(galleryPage.aslink()))
+        self.error_page_content += '* In gallery population: {} has a malformed gallery\n'.format(gallerypage.aslink())
+        logger.warning("Skipped lines:")
         for pair in moveMap[subpage]:
-          pywikibot.output(pair[0] + '|' + pair[1])
+          logger.warning(pair[0] + '|' + pair[1])
         continue
       newGalleryText = currentGalleryText[:endOfGal]
       for pair in moveMap[subpage]:
-        newGalleryText += '\n' + pair[0] + '|' + pair[1]
+        if not pair[0] in currentGalleryText:
+          newGalleryText += '\n' + pair[0] + '|' + pair[1]
       newGalleryText += currentGalleryText[endOfGal:]
       try:
         galleryPage.text = newGalleryText
@@ -517,13 +533,14 @@ class VICbot:
     recentNewText = recentNewText.rstrip()
     try:
       recentPage.text = recentNewText
-      galleryPage.save(summary='{} add recently categorized [[COM:VI|valued images]] to the [[:Category:Galleries of valued images|VI galleries]]'.format(TASK_MESSAGE))
+      recentPage.save(summary='{} add recently categorized [[COM:VI|valued images]] to the [[:Category:Galleries of valued images|VI galleries]]'.format(TASK_MESSAGE))
     except pywikibot.LockedPage:
       logger.warning('Page {} is locked; skipping.'.format(recentPage.aslink()))
     except pywikibot.EditConflict:
       logger.warning('Skipping {} because of edit conflict'.format(recentPage.title()))
     except pywikibot.SpamfilterError as error:
       logger.warning('Cannot change {} because of spam blacklist entry {}'.format(recentPage.title(), error.url))
+      self.error_page_content += '* In "recently promoted": couldn\'t save because of a spam blacklist entry\n'.format(gallerypage.aslink())
 
   def populateRecentlyPromoted(self, tagImages):
     """
@@ -548,7 +565,8 @@ class VICbot:
     
     endOfGal = currentOutputText.rfind('\n</gallery>')
     if endOfGal < 0:
-      logger.debug('Gallery on page {} is malformed; skipping.'.format(outputPage.aslink()))
+      logger.error('Gallery on page {} is malformed; skipping.'.format(outputPage.aslink()))
+      self.error_page_content += '* In gallery population: {} has a malformed gallery\n'.format(gallerypage.aslink())
     else:
       newOutputText = currentOutputText[:endOfGal]
       for image in tagImages:
@@ -564,6 +582,13 @@ class VICbot:
       logger.warning('Skipping {} because of edit conflict'.format(outputPage.title()))
     except pywikibot.SpamfilterError as error:
       logger.warning('Cannot change {} because of spam blacklist entry {}'.format(outputPage.title(), error.url))
+
+
+  def save_error_page(self):
+    error_page = pywikibot.Page(self.site, ERROR_PAGE)
+    error_page.text = self.error_page_content
+    error_page.save(summary='{} report task errors')
+
 
 def main():
   pywikibot.handle_args()
