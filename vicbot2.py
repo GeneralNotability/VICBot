@@ -1,4 +1,4 @@
-'''Ground-up rewrite of VICbot'''
+'''Ground-up rewrite of VICbot.'''
 import re
 
 import mwparserfromhell
@@ -10,8 +10,8 @@ from loguru import logger
 
 TASK_MESSAGE = 'GeneralBotability [[Commons:Bots/Requests/GeneralBotability|task 1]] (maintain VIC):'
 USER_PARSER_RE = re.compile(r'\[\[User:(.*?)(?:\|.*)?\]\]')
-CANDIDATE_INPUT_PAGES= ['Commons:Valued image candidates/candidate list',
-                        'Commons:Valued image candidates/Most valued review candidate list']
+CANDIDATE_INPUT_PAGES =  ['Commons:Valued image candidates/candidate list',
+                          'Commons:Valued image candidates/Most valued review candidate list']
 error_page_content = ''
 
 
@@ -165,14 +165,14 @@ def find_promotion_ready(candidate_list):
 def promote_candidates(ready_list):
     user_notifications = {}
     for entry in ready_list:
-       # Mark the image as promoted
-       logger.info('Promoting File:{}'.format(entry['image']))
-       image_page = pywikibot.Page(pywikibot.Site(), 'File:{}'.format(entry['image']))
-       image_page.text += '\n{{{{subst:VI-add|{}|subpage={}}}}}'.format(entry['scope'], entry['subpage'])
-       image_page.save(summary='{} promoting image to Valued Image'.format(TASK_MESSAGE))
+        # Mark the image as promoted
+        logger.info('Promoting File:{}'.format(entry['image']))
+        image_page = pywikibot.Page(pywikibot.Site(), 'File:{}'.format(entry['image']))
+        image_page.text += '\n{{{{subst:VI-add|{}|subpage={}}}}}'.format(entry['scope'], entry['subpage'])
+        image_page.save(summary='{} promoting image to Valued Image'.format(TASK_MESSAGE))
 
-       # Add to the to-notify list
-       notification = '{{{{VICpromoted|{}|{}|review={}|subpage={}}}}}'.format(entry['image'], entry['scope'], entry['review'], entry['subpage'])
+        # Add to the to-notify list
+        notification = '{{{{VICpromoted|{}|{}|review={}|subpage={}}}}}'.format(entry['image'], entry['scope'], entry['review'], entry['subpage'])
        if entry['username'] in user_notifications:
            user_notifications[entry['username']] += '\n{}'.format(notification)
        else:
