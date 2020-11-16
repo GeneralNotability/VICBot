@@ -168,15 +168,18 @@ def promote_candidates(ready_list):
         # Mark the image as promoted
         logger.info('Promoting File:{}'.format(entry['image']))
         image_page = pywikibot.Page(pywikibot.Site(), 'File:{}'.format(entry['image']))
+        # Issue 6: If the image page is a redirect, resolve the redirect (we can't edit the redirect page, it will fail)
+        if image_page.isRedirectPage():
+            image_page = image_page.getRedirectTarget()
         image_page.text += '\n{{{{subst:VI-add|{}|subpage={}}}}}'.format(entry['scope'], entry['subpage'])
         image_page.save(summary='{} promoting image to Valued Image'.format(TASK_MESSAGE))
 
         # Add to the to-notify list
         notification = '{{{{VICpromoted|{}|{}|review={}|subpage={}}}}}'.format(entry['image'], entry['scope'], entry['review'], entry['subpage'])
-       if entry['username'] in user_notifications:
-           user_notifications[entry['username']] += '\n{}'.format(notification)
-       else:
-           user_notifications[entry['username']] = '{}'.format(notification)
+        if entry['username'] in user_notifications:
+            user_notifications[entry['username']] += '\n{}'.format(notification)
+        else:
+            user_notifications[entry['username']] = '{}'.format(notification)
 
     for user in user_notifications:
         logger.info('Notifying User:{}'.format(user))
@@ -195,7 +198,7 @@ def remove_candidates(candidates_to_remove):
         candidate_input_page = pywikibot.Page(pywikibot.Site(), page_title)
         text = candidate_input_page.text
         for candidate in candidates_to_remove:
-            text = re.sub(r'\|.*{}.*\n'.format(candidate), '', text)
+            text = text.replace('|{}\n'.format(candidate), '')
         candidate_input_page.text = text
         candidate_input_page.save(summary='{} remove promoted and failed VICs'.format(TASK_MESSAGE))
 
@@ -226,6 +229,12 @@ def move_sorted_recently_promoted():
     recently_promoted_page.save(summary='{} remove sorted images'.format(TASK_MESSAGE))
 
 
+def write_error_page():
+    error_page = pywikibot.Page(pywikibot.Site(), 'User:VICBot2/errors')
+    error_page.text = error_page_content
+    error_page.save(summary='{} report errors'.format(TASK_MESSAGE))
+
+
 def main():
     pywikibot.handle_args()
     update_random_sample()
@@ -235,6 +244,7 @@ def main():
     add_recently_promoted(ready_list)
     move_sorted_recently_promoted()
     remove_candidates(failed_list + [x['image'] for x in ready_list])
+    write_error_page()
 
 
 if __name__ == '__main__':
