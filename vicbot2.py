@@ -8,7 +8,7 @@ import pywikibot.pagegenerators
 import pywikibot.textlib
 from loguru import logger
 
-TASK_MESSAGE = 'GeneralBotability [[Commons:Bots/Requests/GeneralBotability|task 1]] (maintain VIC):'
+TASK_MESSAGE = 'VICBot2 [[Commons:Bots/Requests/VICBot2|task 1]] (maintain VIC):'
 USER_PARSER_RE = re.compile(r'\[\[User:(.*?)(?:\|.*)?\]\]')
 CANDIDATE_INPUT_PAGES =  ['Commons:Valued image candidates/candidate list',
                           'Commons:Valued image candidates/Most valued review candidate list']
