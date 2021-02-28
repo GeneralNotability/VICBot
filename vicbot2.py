@@ -189,7 +189,7 @@ def promote_candidates(ready_list):
             text = user_talk_page.text + '\n'
         text = text + '==Valued Image Promoted==\n{}\n--~~~~'.format(user_notifications[user])
         user_talk_page.text = text
-        user_talk_page.save(summary='{} notify user of promoted VI(s)'.format(TASK_MESSAGE))
+        user_talk_page.save(summary='{} notify user of promoted VI(s)'.format(TASK_MESSAGE), minor=False)
 
 
 def remove_candidates(candidates_to_remove):
