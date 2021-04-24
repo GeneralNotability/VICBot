@@ -9,7 +9,7 @@ import pywikibot.textlib
 from loguru import logger
 
 TASK_MESSAGE = 'VICBot2 [[Commons:Bots/Requests/VICBot2|task 1]] (maintain VIC):'
-USER_PARSER_RE = re.compile(r'\[\[User:(.*?)(?:\|.*)?\]\]')
+USER_PARSER_RE = re.compile(r'\[\[User:(.*?)(?:\|.*)?\]\]', re.I)
 CANDIDATE_INPUT_PAGES =  ['Commons:Valued image candidates/candidate list',
                           'Commons:Valued image candidates/Most valued review candidate list']
 error_page_content = ''
@@ -154,7 +154,7 @@ def find_promotion_ready(candidate_list):
             entry['subpage'] = entry['image']
         try:
             entry['username'] = USER_PARSER_RE.search(nominator).group(1)
-        except IndexError:
+        except:
             logger.warning('Unable to parse username from {}'.format(nominator))
             error_page_content += '* In candidate evaluation for [[{}]]: unable to parse username\n'.format(candidate)
             continue
