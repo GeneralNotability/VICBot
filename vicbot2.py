@@ -75,7 +75,7 @@ def find_candidate_list():
         for template in mwparserfromhell.parse(candidate_input_page.text).filter_templates():
             # hacky fix - sometimes there's a byte order mark hiding in the template name,
             # that breaks string comparison
-            if re.sub('\u200e', '', str(template.name).strip()) == 'VICs':
+            if re.sub('\u200e', '', str(template.name)).strip() == 'VICs':
                 for entry in template.params:
                     # Strip out any HTML comments and normalize on no-underscores for
                     candidate_list.add(re.sub('<!--.*-->', '', str(entry), flags=re.S).strip().replace('_', ' '))
