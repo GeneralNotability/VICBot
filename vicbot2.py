@@ -110,7 +110,7 @@ def find_promotion_ready(candidate_list):
         elif status in ['Nominated', 'Discussed', 'Supported', 'Opposed']:
             logger.debug('Candidate {} has VIC discussion status {}, no action needed'.format(candidate, status))
             continue
-        elif status in ['Declined', 'Undecided']:
+        elif status in ['Declined', 'Undecided', 'Withdrawn']:
             failed_promotion.append(candidate)
             continue
         # This should only be stuff approved to promote
