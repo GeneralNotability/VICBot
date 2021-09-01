@@ -194,22 +194,22 @@ def promote_candidates(ready_list):
 
 def remove_candidates(candidates_to_remove):
     logger.info('Removing promoted and failed candidates')
-    text 'Commons:Valued image candidates/candidate list',
-                          'Commons:Valued image candidates/Most valued review candidate list']
     for page_title in CANDIDATE_INPUT_PAGES:
         candidate_input_page = pywikibot.Page(pywikibot.Site(), page_title)
-        parsed = mwparserfromhell.parse(text)
-        for template in parsed.filter_templates():
-            if not template.name.matches('VICs'):
-                continue
-            for param in template.params:
-                if param.value.matches(candidate):
-                    if 'Most valued review candidate list' in page_title:
-                        # If we're closing out a review, delete the whole thing
-                        parsed.remove(template)
-                    else:
-                        template.params.delete(param)
+        parsed = mwparserfromhell.parse(candidate_input_page.text)
+        for candidate in candidates_to_remove:
+            for template in parsed.filter_templates():
+                if not template.name.matches('VICs'):
+                    continue
+                for param in template.params:
+                    if param.value.matches(candidate):
+                        if 'Most valued review candidate list' in page_title:
+                            # If we're closing out a review, delete the whole thing
+                            parsed.remove(template)
+                        else:
+                            template.params.remove(param)
         candidate_input_page.text = parsed
+        logger.info(parsed)
         candidate_input_page.save(summary='{} remove promoted and failed VICs'.format(TASK_MESSAGE))
 
 
